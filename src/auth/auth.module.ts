@@ -6,9 +6,11 @@ import { UsersModule } from '../users/users.module';
 import { AuthResolver } from './auth.resolver';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import jwtConfig from 'src/config/jwt.config';
 
 @Module({
     imports: [
+        ConfigModule.forFeature(jwtConfig),
         PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.registerAsync({
             imports: [ConfigModule],

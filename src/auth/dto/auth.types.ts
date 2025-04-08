@@ -11,3 +11,9 @@ export class AuthResponse {
     @Field(() => User)
     user: User;
 }
+
+@ObjectType()
+export class RegisterResponse {
+    @Field(() => User)
+    user: User;
+}

@@ -14,8 +14,8 @@ export class AuthService {
         private readonly jwtService: JwtService,
     ) { }
 
-    async register(registerInput: RegisterInput) {
-        const { name, email, password } = registerInput;
+    async register(registerInput: RegisterInput) {       
+        const { name, email, password } = registerInput;       
         const existingUser = await this.usersService.findUserByEmail(email);
 
         // Check if user already exists
@@ -23,8 +23,8 @@ export class AuthService {
             throw new UnauthorizedException('Email already in use');
         }
         const user = await this.usersService.createUser(name, email, password);
-        const token = this.generateToken(user.id).access_token;
-        return { user, token };
+        // const token = this.generateToken(user.id).access_token;
+        return { user };       
     }
 
     async login(loginInput: LoginInput) {

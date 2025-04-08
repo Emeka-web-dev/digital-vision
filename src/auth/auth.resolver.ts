@@ -4,16 +4,17 @@ import { AuthService } from './auth.service';
 import { RegisterInput } from './dto/register.input';
 import { LoginInput } from './dto/login.input';
 import { BiometricLoginInput } from './dto/biometric-login.input';
-import { AuthResponse } from './dto/auth.types';
+import { AuthResponse, RegisterResponse } from './dto/auth.types';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '../users/models/user.model';
 
+@Resolver()
 export class AuthResolver {
-    constructor(private readonly authService: AuthService) { }
+    constructor(private authService: AuthService) { }
 
     @Mutation(() => AuthResponse)
-    async register(@Args('input') input: RegisterInput): Promise<AuthResponse> {
+    async register(@Args('input') input: RegisterInput): Promise<RegisterResponse> {       
         return this.authService.register(input);
     }
 
