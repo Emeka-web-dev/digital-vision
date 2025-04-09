@@ -47,7 +47,7 @@ import { BiometricLoginInput } from './dto/biometric-login.input';
   
     @Mutation(() => Token)
     async refreshToken(@Args() { token }: RefreshTokenInput) {
-      return this.auth.refreshToken(token);
+      return this.auth.getRefreshToken(token);
     }
 
     @Mutation(() => Auth)

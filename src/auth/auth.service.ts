@@ -20,25 +20,14 @@ import { BiometricLoginInput } from './dto/biometric-login.input';
 export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
-    private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly passwordService: PasswordService,
     private readonly configService: ConfigService,
   ) { }
 
   async createUser(payload: SignupInput): Promise<Token> {
-    const hashedPassword = await this.passwordService.hashPassword(
-      payload.password,
-    );
-
     try {
-      const user = await this.prisma.user.create({
-        data: {
-          name: payload.name,
-          email: payload.email,
-          password: hashedPassword,
-        },
-      });
+      const user = await this.usersService.createUser(payload.name, payload.email, payload.password);
 
       return this.generateTokens({
         userId: user.id,
@@ -55,8 +44,7 @@ export class AuthService {
   }
 
   async login(email: string, password: string): Promise<Token> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-
+    const user = await this.usersService.findUserByEmail(email);
     if (!user) {
       throw new NotFoundException(`No user found for email: ${email}`);
     }
@@ -95,12 +83,12 @@ export class AuthService {
 
 
   validateUser(userId: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { id: userId } });
+    return this.usersService.findUserById(userId);
   }
 
   getUserFromToken(token: string): Promise<User | null> {
     const id = this.jwtService.decode(token)['userId'];
-    return this.prisma.user.findUnique({ where: { id } });
+    return this.usersService.findUserById(id);
   }
 
   generateTokens(payload: { userId: string }): Token {
@@ -126,12 +114,13 @@ export class AuthService {
     });
   }
 
-  refreshToken(token: string) {
+  getRefreshToken(token: string) {
     try {
       const { userId } = this.jwtService.verify(token, {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
       });
-
+      // check if userId is valid
+      
       return this.generateTokens({
         userId,
       });
