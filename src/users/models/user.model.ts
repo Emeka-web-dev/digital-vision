@@ -1,23 +1,22 @@
-import { Field, ID, ObjectType } from '@nestjs/graphql';
-
+import 'reflect-metadata';
+import {
+  ObjectType,
+  registerEnumType,
+  HideField,
+  Field,
+} from '@nestjs/graphql';
+import { IsEmail } from 'class-validator';
+import { BaseModel } from 'src/common/models/base.model';
 
 @ObjectType()
-export class User {
-  @Field(() => ID)
-  id: string;
-
+export class User extends BaseModel {
   @Field()
-  name: string;
-
-  @Field()
+  @IsEmail()
   email: string;
 
-  @Field(() => String, { nullable: true })
-  biometricKey?: string | null;
-
   @Field()
-  createdAt: Date;
+  name: string;  
 
-  @Field()
-  updatedAt: Date;
+  @HideField()
+  password: string;
 }

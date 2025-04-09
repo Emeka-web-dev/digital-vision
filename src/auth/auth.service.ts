@@ -1,84 +1,120 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { PrismaService } from 'nestjs-prisma';
+import { Prisma, User } from '@prisma/client';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../users/users.service';
-import * as bcrypt from 'bcryptjs';
-import { RegisterInput } from './dto/register.input';
-import { LoginInput } from './dto/login.input';
-import { BiometricLoginInput } from './dto/biometric-login.input';
-import { User } from '@prisma/client';
+import { PasswordService } from './passwort.service';
+import { SignupInput } from './dto/signup.input';
+import { Token } from './models/token.model';
+import { SecurityConfig } from '../common/configs/config.interface';
 
 @Injectable()
 export class AuthService {
-    constructor(
-        private readonly usersService: UsersService,
-        private readonly jwtService: JwtService,
-    ) { }
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+    private readonly passwordService: PasswordService,
+    private readonly configService: ConfigService,
+  ) {}
 
-    async register(registerInput: RegisterInput) {       
-        const { name, email, password } = registerInput;       
-        const existingUser = await this.usersService.findUserByEmail(email);
+  async createUser(payload: SignupInput): Promise<Token> {
+    const hashedPassword = await this.passwordService.hashPassword(
+      payload.password,
+    );
 
-        // Check if user already exists
-        if (existingUser) {
-            throw new UnauthorizedException('Email already in use');
-        }
-        const user = await this.usersService.createUser(name, email, password);
-        // const token = this.generateToken(user.id).access_token;
-        return { user };       
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          name: payload.name,
+          email: payload.email,
+          password: hashedPassword,         
+        },
+      });
+
+      return this.generateTokens({
+        userId: user.id,
+      });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException(`Email ${payload.email} already used.`);
+      }
+      throw new Error(e);
+    }
+  }
+
+  async login(email: string, password: string): Promise<Token> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      throw new NotFoundException(`No user found for email: ${email}`);
     }
 
-    async login(loginInput: LoginInput) {
-        const { email, password } = loginInput;
-        const user = await this.usersService.findUserByEmail(email);
+    const passwordValid = await this.passwordService.validatePassword(
+      password,
+      user.password,
+    );
 
-        // Check if user exists and password is correct
-        if (!user || !(await bcrypt.compare(password, user.password))) {
-            throw new UnauthorizedException('Invalid credentials');
-        }
-
-        // Remove password from user object before returning
-        const token = this.generateToken(user.id).access_token;
-        const { password: _, ...userWithoutPassword } = user;
-
-        return { user: userWithoutPassword, token };
-
+    if (!passwordValid) {
+      throw new BadRequestException('Invalid password');
     }
 
-    async biometricLogin(biometricLoginInput: BiometricLoginInput) {
-        const { biometricKey } = biometricLoginInput;
+    return this.generateTokens({
+      userId: user.id,
+    });
+  }
 
-        // Check if the biometric key is valid
-        const user = await this.usersService.findUserByBiometricKey(biometricKey);
-        if (!user) {
-            throw new UnauthorizedException('Invalid biometric key');
-        }
+  validateUser(userId: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { id: userId } });
+  }
 
-        const { password: _, ...userWithoutPassword } = user;
-        const token = this.generateToken(user.id).access_token;
+  getUserFromToken(token: string): Promise<User | null> {
+    const id = this.jwtService.decode(token)['userId'];
+    return this.prisma.user.findUnique({ where: { id } });
+  }
 
-        return { user: userWithoutPassword, token };
+  generateTokens(payload: { userId: string }): Token {
+    return {
+      accessToken: this.generateAccessToken(payload),
+      refreshToken: this.generateRefreshToken(payload),
+    };
+  }
+
+  private generateAccessToken(payload: { userId: string }): string {
+    const securityConfig = this.configService.get<SecurityConfig>('security');
+    return this.jwtService.sign(payload, {
+      secret: this.configService.get('JWT_ACCESS_SECRET'),
+      expiresIn: securityConfig?.expiresIn,
+    });
+  }
+
+  private generateRefreshToken(payload: { userId: string }): string {
+    const securityConfig = this.configService.get<SecurityConfig>('security');
+    return this.jwtService.sign(payload, {
+      secret: this.configService.get('JWT_REFRESH_SECRET'),
+      expiresIn: securityConfig?.refreshIn,
+    });
+  }
+
+  refreshToken(token: string) {
+    try {
+      const { userId } = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_REFRESH_SECRET'),
+      });
+
+      return this.generateTokens({
+        userId,
+      });
+    } catch (e) {
+      throw new UnauthorizedException();
     }
-
-    async updateBiometricKey(userId: string, biometricKey: string) {
-        // Check if the biometric key is valid
-        const existingUser = await this.usersService.findUserByBiometricKey(biometricKey);
-        if (existingUser && existingUser.id !== userId) {
-            throw new UnauthorizedException('Biometric key already in use');
-        }
-        const user = await this.usersService.updateUserBiometricKey(userId, biometricKey);
-        const { password: _, ...userWithoutPassword } = user;
-        return userWithoutPassword as User;
-    }
-
-    async validateUser(userId: string) {
-        return this.usersService.findUserById(userId);
-    }
-
-    private generateToken(user: any) {
-        const payload = { id: user.id, email: user.email };
-        return {
-            access_token: this.jwtService.sign(payload),
-            user,
-        };
-    }
+  }
 }

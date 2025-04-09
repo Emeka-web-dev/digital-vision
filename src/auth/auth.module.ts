@@ -1,31 +1,37 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { UsersModule } from '../users/users.module';
-import { AuthResolver } from './auth.resolver';
+import { ConfigService } from '@nestjs/config';
+import { SecurityConfig } from 'src/common/configs/config.interface';
 import { AuthService } from './auth.service';
+import { AuthResolver } from './auth.resolver';
 import { JwtStrategy } from './jwt.strategy';
-import jwtConfig from 'src/config/jwt.config';
+import { GqlAuthGuard } from './gql-auth.guard';
+import { PasswordService } from './passwort.service';
 
 @Module({
     imports: [
-        ConfigModule.forFeature(jwtConfig),
-        PassportModule.register({ defaultStrategy: 'jwt' }),
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: async (configService: ConfigService) => ({
-                secret: configService.get<string>('JWT_SECRET'),
-                signOptions: {
-                    expiresIn: configService.get<string>('JWT_EXPIRES_IN'),
-                },
-            })
-        }),
-        UsersModule,
-
+      PassportModule.register({ defaultStrategy: 'jwt' }),
+      JwtModule.registerAsync({
+        useFactory: async (configService: ConfigService) => {
+          const securityConfig = configService.get<SecurityConfig>('security');
+          return {
+            secret: configService.get<string>('JWT_ACCESS_SECRET'),
+            signOptions: {
+              expiresIn: securityConfig?.expiresIn,
+            },
+          };
+        },
+        inject: [ConfigService],
+      }),
     ],
-    providers: [AuthService, AuthResolver, JwtStrategy],
-    exports: [AuthService]
-})
-export class AuthModule { }
+    providers: [
+      AuthService,
+      AuthResolver,
+      JwtStrategy,
+      GqlAuthGuard,
+      PasswordService,
+    ],
+    exports: [GqlAuthGuard],
+  })
+  export class AuthModule {}

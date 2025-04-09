@@ -1,27 +1,32 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Strategy, ExtractJwt } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { User } from '@prisma/client';
 import { AuthService } from './auth.service';
+import { JwtDto } from './dto/jwt.dto';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly authService: AuthService,
-  ) {
-    super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKeyProvider: () => configService.get('JWT_SECRET'),
-      ignoreExpiration: false,
-    });
-  }
-
-  async validate(payload: { sub: string }) {
-    const user = await this.authService.validateUser(payload.sub);
-    if (!user) {
-      throw new UnauthorizedException();
+    constructor(
+        private readonly authService: AuthService,
+        readonly configService: ConfigService,
+    ) {
+        const jwtSecret = configService.get<string>('JWT_ACCESS_SECRET');
+        if (!jwtSecret) {
+            throw new Error('JWT_ACCESS_SECRET is not defined in config');
+        }
+        super({
+            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+            secretOrKey: jwtSecret,
+        });
     }
-    return user;
-  }
+
+    async validate(payload: JwtDto): Promise<User> {
+        const user = await this.authService.validateUser(payload.userId);
+        if (!user) {
+            throw new UnauthorizedException();
+        }
+        return user;
+    }
 }
