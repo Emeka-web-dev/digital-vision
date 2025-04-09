@@ -14,8 +14,8 @@ import {
   import { User } from '../users/models/user.model';
 import { GqlAuthGuard } from './gql-auth.guard';
 import { UseGuards } from '@nestjs/common';
-import { UserEntity } from 'src/common/decorators/current-user.decorator';
-import { UsersService } from 'src/users/users.service';
+import { UserEntity } from '../common/decorators/current-user.decorator';
+import { UsersService } from '../users/users.service';
 import { BiometricLoginInput } from './dto/biometric-login.input';
 
   @Resolver(() => Auth)

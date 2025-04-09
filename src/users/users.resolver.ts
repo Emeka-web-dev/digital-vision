@@ -1,7 +1,7 @@
 import { UseGuards } from "@nestjs/common";
 import { Query, Resolver } from "@nestjs/graphql";
-import { GqlAuthGuard } from "src/auth/gql-auth.guard";
-import { UserEntity } from "src/common/decorators/current-user.decorator";
+import { GqlAuthGuard } from "../auth/gql-auth.guard";
+import { UserEntity } from "../common/decorators/current-user.decorator";
 import { User } from "./models/user.model";
 import { UsersService } from "./users.service";
 

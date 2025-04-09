@@ -9,11 +9,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { PasswordService } from './passwort.service';
+import { PasswordService } from './password.service';
 import { SignupInput } from './dto/signup.input';
 import { Token } from './models/token.model';
 import { SecurityConfig } from '../common/configs/config.interface';
-import { UsersService } from 'src/users/users.service';
+import { UsersService } from '../users/users.service';
 import { BiometricLoginInput } from './dto/biometric-login.input';
 
 @Injectable()
@@ -39,7 +39,7 @@ export class AuthService {
       ) {
         throw new ConflictException(`Email ${payload.email} already used.`);
       }
-      throw new Error(e);
+      throw new Error(e.message || e);
     }
   }
 

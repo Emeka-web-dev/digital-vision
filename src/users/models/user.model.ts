@@ -6,7 +6,7 @@ import {
   Field,
 } from '@nestjs/graphql';
 import { IsEmail } from 'class-validator';
-import { BaseModel } from 'src/common/models/base.model';
+import { BaseModel } from '../../common/models/base.model';
 
 @ObjectType()
 export class User extends BaseModel {
