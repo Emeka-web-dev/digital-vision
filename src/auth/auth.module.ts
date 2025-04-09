@@ -8,6 +8,7 @@ import { AuthResolver } from './auth.resolver';
 import { JwtStrategy } from './jwt.strategy';
 import { GqlAuthGuard } from './gql-auth.guard';
 import { PasswordService } from './passwort.service';
+import { UsersService } from 'src/users/users.service';
 
 @Module({
     imports: [
@@ -27,6 +28,7 @@ import { PasswordService } from './passwort.service';
     ],
     providers: [
       AuthService,
+      UsersService,
       AuthResolver,
       JwtStrategy,
       GqlAuthGuard,

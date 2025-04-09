@@ -13,15 +13,17 @@ import { PasswordService } from './passwort.service';
 import { SignupInput } from './dto/signup.input';
 import { Token } from './models/token.model';
 import { SecurityConfig } from '../common/configs/config.interface';
+import { UsersService } from 'src/users/users.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    // private readonly usersService: UsersService,
     private readonly passwordService: PasswordService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   async createUser(payload: SignupInput): Promise<Token> {
     const hashedPassword = await this.passwordService.hashPassword(
@@ -33,7 +35,7 @@ export class AuthService {
         data: {
           name: payload.name,
           email: payload.email,
-          password: hashedPassword,         
+          password: hashedPassword,
         },
       });
 
@@ -71,6 +73,7 @@ export class AuthService {
       userId: user.id,
     });
   }
+
 
   validateUser(userId: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { id: userId } });

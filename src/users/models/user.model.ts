@@ -19,4 +19,7 @@ export class User extends BaseModel {
 
   @HideField()
   password: string;
+
+  @Field(() => String, { nullable: true })
+  biometricKey?: string | null;
 }

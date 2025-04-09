@@ -12,7 +12,7 @@ import {
   import { SignupInput } from './dto/signup.input';
   import { RefreshTokenInput } from './dto/refresh-token.input';
   import { User } from '../users/models/user.model';
-  
+
   @Resolver(() => Auth)
   export class AuthResolver {
     constructor(private readonly auth: AuthService) {}
@@ -44,6 +44,7 @@ import {
     async refreshToken(@Args() { token }: RefreshTokenInput) {
       return this.auth.refreshToken(token);
     }
+  
   
     @ResolveField('user', () => User)
     async user(@Parent() auth: Auth) {

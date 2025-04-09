@@ -29,6 +29,7 @@ input LoginInput {
 type Mutation {
   login(data: LoginInput!): Auth!
   refreshToken(token: JWT!): Token!
+  setBiometricData(data: String!): User!
   signup(data: SignupInput!): Auth!
 }
 
@@ -51,6 +52,8 @@ type Token {
 }
 
 type User {
+  biometricKey: String
+
   """Identifies the date and time when the object was created."""
   createdAt: DateTime!
   email: String!
