@@ -52,7 +52,7 @@ export class UsersService {
         return user;
     }
     
-    private secureBiometricHash(biometricInput: string): string {
+    secureBiometricHash(biometricInput: string): string {
         return crypto
             .createHash('sha256')
             .update(biometricInput)

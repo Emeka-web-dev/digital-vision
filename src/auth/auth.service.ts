@@ -14,13 +14,14 @@ import { SignupInput } from './dto/signup.input';
 import { Token } from './models/token.model';
 import { SecurityConfig } from '../common/configs/config.interface';
 import { UsersService } from 'src/users/users.service';
+import { BiometricLoginInput } from './dto/biometric-login.input';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
-    // private readonly usersService: UsersService,
+    private readonly usersService: UsersService,
     private readonly passwordService: PasswordService,
     private readonly configService: ConfigService,
   ) { }
@@ -72,6 +73,24 @@ export class AuthService {
     return this.generateTokens({
       userId: user.id,
     });
+  }
+
+  async biometricLogin(biometricInput: BiometricLoginInput) {
+    const {biometricKey} = biometricInput;
+
+    // Hash the biometric key
+    const hashedBiometricKey = this.usersService.secureBiometricHash(biometricKey);
+
+    // Check if the biometric key is valid
+    const user = await this.usersService.findUserByBiometricKey(hashedBiometricKey);
+    if (!user) {
+        throw new UnauthorizedException('Invalid biometric key');
+    }  
+
+    return this.generateTokens({
+      userId: user.id,
+    })
+    
   }
 
 

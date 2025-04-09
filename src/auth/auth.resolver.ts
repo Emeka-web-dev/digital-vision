@@ -12,10 +12,15 @@ import {
   import { SignupInput } from './dto/signup.input';
   import { RefreshTokenInput } from './dto/refresh-token.input';
   import { User } from '../users/models/user.model';
+import { GqlAuthGuard } from './gql-auth.guard';
+import { UseGuards } from '@nestjs/common';
+import { UserEntity } from 'src/common/decorators/current-user.decorator';
+import { UsersService } from 'src/users/users.service';
+import { BiometricLoginInput } from './dto/biometric-login.input';
 
   @Resolver(() => Auth)
   export class AuthResolver {
-    constructor(private readonly auth: AuthService) {}
+    constructor(private readonly auth: AuthService, private readonly usersService: UsersService) {}
   
     @Mutation(() => Auth)
     async signup(@Args('data') data: SignupInput) {
@@ -44,7 +49,21 @@ import {
     async refreshToken(@Args() { token }: RefreshTokenInput) {
       return this.auth.refreshToken(token);
     }
+
+    @Mutation(() => Auth)
+    async biometricLogin(@Args('input') input: BiometricLoginInput) {
+        return this.auth.biometricLogin(input);
+    }
   
+    // Protected route
+    @Mutation(() => User)
+    @UseGuards(GqlAuthGuard)
+    async setBiometricData(
+        @UserEntity() user: User,
+        @Args("data") data: string
+    ): Promise<User> {
+        return await this.usersService.setBiometricKey(user.id, data);
+    }
   
     @ResolveField('user', () => User)
     async user(@Parent() auth: Auth) {
