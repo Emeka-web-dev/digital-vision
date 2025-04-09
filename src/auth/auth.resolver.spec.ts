@@ -1,129 +1,274 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuthResolver } from './auth.resolver';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
-import { SignupInput } from './dto/signup.input';
-import { LoginInput } from './dto/login.input';
-import { BiometricLoginInput } from './dto/biometric-login.input';
-import { User } from '@prisma/client';
-import { RefreshTokenInput } from './dto/refresh-token.input';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { PasswordService } from './password.service';
+import { 
+  NotFoundException, 
+  BadRequestException, 
+  UnauthorizedException, 
+  ConflictException 
+} from '@nestjs/common';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { create } from 'domain';
 
-// Mock implementations
-const mockAuthService = {
-  createUser: jest.fn(),
-  login: jest.fn(),
-  refreshToken: jest.fn(),
-  biometricLogin: jest.fn(),
-  getUserFromToken: jest.fn(),
-};
-
-const mockUsersService = {
-  setBiometricKey: jest.fn(),
-};
-
-// Sample data
-const mockUser: User = {
-  id: 'user-id',
-  email: 'test@example.com',
-  name: 'Test User',
-  password: 'hashed-password',
-  biometricKey: 'hashed-biometric-key',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
-
-const mockTokens = {
-  accessToken: 'access-token',
-  refreshToken: 'refresh-token',
-};
-
-describe('AuthResolver', () => {
-  let resolver: AuthResolver;
+describe('AuthService', () => {
+  let authService: AuthService;
+  let usersService: Partial<UsersService>;
+  let jwtService: Partial<JwtService>;
+  let passwordService: Partial<PasswordService>;
+  let configService: Partial<ConfigService>;
 
   beforeEach(async () => {
+    usersService = {
+      findUserByEmail: jest.fn(),
+      createUser: jest.fn(),
+      findUserById: jest.fn(),
+      findUserByBiometricKey: jest.fn(),
+      secureBiometricHash: jest.fn().mockReturnValue('hashed-biometric-key')
+    };
+
+    jwtService = {
+      sign: jest.fn().mockImplementation(() => 'mockedToken'),
+      decode: jest.fn().mockReturnValue({ userId: 'mockedUserId' }),
+      verify: jest.fn().mockReturnValue({ userId: 'mockedUserId' }),
+    };
+
+    passwordService = {
+      validatePassword: jest.fn(),
+    };
+
+    configService = {
+      get: jest.fn().mockImplementation((key) => {
+        if (key === 'JWT_ACCESS_SECRET') return 'accessSecret';
+        if (key === 'JWT_REFRESH_SECRET') return 'refreshSecret';
+        if (key === 'security') return { expiresIn: '2m', refreshIn: '7d' };
+        return null;
+      })
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        AuthResolver,
-        { provide: AuthService, useValue: mockAuthService },
-        { provide: UsersService, useValue: mockUsersService },
+        AuthService,
+        { provide: UsersService, useValue: usersService },
+        { provide: JwtService, useValue: jwtService },
+        { provide: PasswordService, useValue: passwordService },
+        { provide: ConfigService, useValue: configService },
       ],
     }).compile();
 
-    resolver = module.get<AuthResolver>(AuthResolver);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
+    authService = module.get<AuthService>(AuthService);
   });
 
   it('should be defined', () => {
-    expect(resolver).toBeDefined();
+    expect(authService).toBeDefined();
   });
 
-  describe('signup', () => {
-    const signupInput: SignupInput = {
-      email: 'test@example.com',
-      password: 'password123',
-      name: 'Test User',
+  describe('createUser', () => {
+    const signupInput = {
+      name: 'John Doe',
+      email: 'john@example.com',
+      password: 'password123'
     };
 
-    it('should call authService.createUser and return tokens', async () => {
-      mockAuthService.createUser.mockResolvedValueOnce(mockTokens);
+    const mockUser = {
+      id: '1',
+      name: 'John Doe',
+      email: 'john@example.com',
+      password: 'hashedPassword',
+      biometricKey: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('should create a user and return tokens', async () => {
+      jest.spyOn(usersService, 'createUser').mockResolvedValue(mockUser);
+
+      const result = await authService.createUser(signupInput);
+
+      expect(usersService.createUser).toHaveBeenCalledWith(
+        signupInput.name,
+        signupInput.email,
+        signupInput.password
+      );
+      expect(result).toEqual({ accessToken: 'mockedToken', refreshToken: 'mockedToken' });
+    });
+
+   
+    it('should throw a generic error for unexpected exceptions', async () => {
+      jest.spyOn(usersService, 'createUser').mockRejectedValue(new Error('Unexpected error'));
+    
+      await expect(authService.createUser(signupInput))
+        .rejects.toThrow(Error);
       
-      const result = await resolver.signup(signupInput);
-      
-      expect(mockAuthService.createUser).toHaveBeenCalledWith({
-        ...signupInput,
-        email: signupInput.email.toLowerCase(),
-      });
-      expect(result).toEqual(mockTokens);
+      expect(usersService.createUser).toHaveBeenCalledWith(
+        signupInput.name,
+        signupInput.email,
+        signupInput.password
+      );
     });
   });
 
   describe('login', () => {
-    const loginInput: LoginInput = {
-      email: 'test@example.com',
-      password: 'password123',
+    const mockEmail = 'john@example.com';
+    const mockPassword = 'password123';
+    
+    const mockUser = {
+      id: '1',
+      email: 'john@example.com',
+      password: 'hashedPassword',
+      name: 'John Doe',
+      biometricKey: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    it('should call authService.login and return tokens', async () => {
-      mockAuthService.login.mockResolvedValueOnce(mockTokens);
-      
-      const result = await resolver.login(loginInput);
-      
-      expect(mockAuthService.login).toHaveBeenCalledWith(
-        loginInput.email.toLowerCase(),
-        loginInput.password,
+    it('should login a user and return tokens', async () => {
+      jest.spyOn(usersService, 'findUserByEmail').mockResolvedValue(mockUser);
+      jest.spyOn(passwordService, 'validatePassword').mockResolvedValue(true);
+
+      const result = await authService.login(mockEmail, mockPassword);
+
+      expect(usersService.findUserByEmail).toHaveBeenCalledWith(mockEmail);
+      expect(passwordService.validatePassword).toHaveBeenCalledWith(
+        mockPassword,
+        mockUser.password
       );
-      expect(result).toEqual(mockTokens);
+      expect(result).toEqual({ accessToken: 'mockedToken', refreshToken: 'mockedToken' });
+    });
+
+    it('should throw NotFoundException if user is not found', async () => {
+      jest.spyOn(usersService, 'findUserByEmail').mockResolvedValue(null);
+
+      await expect(authService.login(mockEmail, mockPassword))
+        .rejects.toThrow(NotFoundException);
+      
+      expect(usersService.findUserByEmail).toHaveBeenCalledWith(mockEmail);
+    });
+
+    it('should throw BadRequestException if password is invalid', async () => {
+      jest.spyOn(usersService, 'findUserByEmail').mockResolvedValue(mockUser);
+      jest.spyOn(passwordService, 'validatePassword').mockResolvedValue(false);
+
+      await expect(authService.login(mockEmail, mockPassword))
+        .rejects.toThrow(BadRequestException);
+      
+      expect(usersService.findUserByEmail).toHaveBeenCalledWith(mockEmail);
+      expect(passwordService.validatePassword).toHaveBeenCalledWith(
+        mockPassword,
+        mockUser.password
+      );
     });
   });
-
 
   describe('biometricLogin', () => {
-    const biometricLoginInput: BiometricLoginInput = {
-      biometricKey: 'biometric-key',
+    const biometricInput = { biometricKey: 'biometricKey' };
+    
+    const mockUser = {
+      id: '1',
+      biometricKey: 'hashed-biometricKey',
+      email: 'john@example.com',
+      name: 'John Doe',
+      password: 'hashedPassword',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    it('should call authService.biometricLogin and return tokens', async () => {
-      mockAuthService.biometricLogin.mockResolvedValueOnce(mockTokens);
+    it('should login a user with a valid biometric key', async () => {
+      jest.spyOn(usersService, 'secureBiometricHash').mockReturnValue('hashed-biometricKey');
+      jest.spyOn(usersService, 'findUserByBiometricKey').mockResolvedValue(mockUser);
+  
+      const result = await authService.biometricLogin(biometricInput);
+  
+      expect(usersService.secureBiometricHash).toHaveBeenCalledWith('biometricKey');
+      expect(usersService.findUserByBiometricKey).toHaveBeenCalledWith('hashed-biometricKey');
+      expect(result).toEqual({ accessToken: 'mockedToken', refreshToken: 'mockedToken' });
+    });
+  
+    it('should throw UnauthorizedException if biometric key is invalid', async () => {
+      jest.spyOn(usersService, 'secureBiometricHash').mockReturnValue('hashed-biometricKey');
+      jest.spyOn(usersService, 'findUserByBiometricKey').mockResolvedValue(null);
+  
+      await expect(authService.biometricLogin(biometricInput))
+        .rejects.toThrow(UnauthorizedException);
       
-      const result = await resolver.biometricLogin(biometricLoginInput);
-      
-      expect(mockAuthService.biometricLogin).toHaveBeenCalledWith(biometricLoginInput);
-      expect(result).toEqual(mockTokens);
+      expect(usersService.secureBiometricHash).toHaveBeenCalledWith('biometricKey');
+      expect(usersService.findUserByBiometricKey).toHaveBeenCalledWith('hashed-biometricKey');
     });
   });
 
-  describe('setBiometricData', () => {
-    it('should call usersService.setBiometricKey and return updated user', async () => {
-      mockUsersService.setBiometricKey.mockResolvedValueOnce(mockUser);
-      
-      const result = await resolver.setBiometricData(mockUser, 'biometric-key');
-      
-      expect(mockUsersService.setBiometricKey).toHaveBeenCalledWith(mockUser.id, 'biometric-key');
+  describe('validateUser', () => {
+    it('should return a user when found', async () => {
+      const mockUser = { 
+        id: '1', 
+        name: 'John Doe', 
+        email: 'john@example.com', 
+        password: 'hashedPassword', 
+        biometricKey: null, 
+        createdAt: new Date(), 
+        updatedAt: new Date() 
+      };
+      jest.spyOn(usersService, 'findUserById').mockResolvedValue(mockUser);
+
+      const result = await authService.validateUser('1');
+
+      expect(usersService.findUserById).toHaveBeenCalledWith('1');
       expect(result).toEqual(mockUser);
     });
+
+    it('should return null when user is not found', async () => {
+      jest.spyOn(usersService, 'findUserById').mockResolvedValue(null);
+
+      const result = await authService.validateUser('nonexistent');
+
+      expect(usersService.findUserById).toHaveBeenCalledWith('nonexistent');
+      expect(result).toBeNull();
+    });
   });
 
+  describe('generateTokens', () => {
+    it('should generate access and refresh tokens', () => {
+      jest.spyOn(jwtService, 'sign').mockReturnValueOnce('accessToken').mockReturnValueOnce('refreshToken');
+
+      const result = authService.generateTokens({ userId: '1' });
+
+      expect(jwtService.sign).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        accessToken: 'accessToken',
+        refreshToken: 'refreshToken'
+      });
+    });
+  });
+
+  describe('getRefreshToken', () => {
+    it('should return new tokens from a valid refresh token', () => {
+      jest.spyOn(jwtService, 'verify').mockReturnValue({ userId: '1' });
+      jest.spyOn(jwtService, 'sign')
+        .mockReturnValueOnce('newAccessToken')
+        .mockReturnValueOnce('newRefreshToken');
+
+      const result = authService.getRefreshToken('validRefreshToken');
+
+      expect(jwtService.verify).toHaveBeenCalledWith('validRefreshToken', { 
+        secret: 'refreshSecret' 
+      });
+      expect(result).toEqual({
+        accessToken: 'newAccessToken',
+        refreshToken: 'newRefreshToken'
+      });
+    });
+
+    it('should throw UnauthorizedException if refresh token is invalid', () => {
+      jest.spyOn(jwtService, 'verify').mockImplementation(() => {
+        throw new Error('Invalid token');
+      });
+
+      expect(() => authService.getRefreshToken('invalidToken')).toThrow(UnauthorizedException);
+      
+      expect(jwtService.verify).toHaveBeenCalledWith('invalidToken', { 
+        secret: 'refreshSecret' 
+      });
+    });
+  });
 });
